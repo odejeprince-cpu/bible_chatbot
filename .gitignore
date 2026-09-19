@@ -1,9 +1,4 @@
-
 .env
-__pycache__/
-*.pyc
 .venv/
 venv/
-data/*.pdf
-index/*.faiss
-index/*.json
+chats/

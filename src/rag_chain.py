@@ -2,11 +2,18 @@
 Wraps the Google Gemini API (via the current google-genai SDK) with a
 strict, grounding-only system prompt so the model never answers from
 outside knowledge or invents verses.
+
+Also retries automatically on temporary server-side errors (like a
+503 "high demand" response) with a short, increasing delay between
+attempts - most of these clear up within a second or two, so a plain
+retry often means the person never even notices the hiccup happened.
 """
 import os
+import time
 from typing import Dict, List
 
 from google import genai
+from google.genai import errors as genai_errors
 
 SYSTEM_INSTRUCTIONS = """You are a Bible study assistant that answers questions using ONLY the \
 King James Version (KJV) Bible passages provided as context below.
@@ -25,9 +32,15 @@ do not paraphrase it into modern English or another translation's wording.
 beyond what the text itself says, unless the question explicitly asks you \
 to explain a passage's plain meaning."""
 
+# How many times to retry a request that fails with a temporary server
+# error, and how long to wait before the first retry (doubling each time -
+# e.g. 2s, then 4s - which is the standard "exponential backoff" pattern).
+MAX_RETRIES = 3
+INITIAL_BACKOFF_SECONDS = 2
+
 
 class RAGChain:
-    def __init__(self, api_key: str = None, model: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: str = None, model: str = "gemini-3.6-flash"):
         api_key = api_key or os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError(
@@ -53,8 +66,25 @@ class RAGChain:
             f"Answer (cite references in the form Book Chapter:Verse):"
         )
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-        )
-        return response.text
+        backoff = INITIAL_BACKOFF_SECONDS
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                )
+                return response.text
+            except genai_errors.ServerError:
+                # A 5xx error (e.g. 503 "high demand") is temporary and
+                # worth retrying. A 4xx error (bad key, bad request) would
+                # raise ClientError instead - retrying that would just
+                # fail the same way every time, so we deliberately don't
+                # catch it here and let it surface immediately.
+                if attempt == MAX_RETRIES:
+                    return (
+                        "Gemini is temporarily unavailable right now (the "
+                        "servers are reporting high demand). Please try "
+                        "asking again in a moment."
+                    )
+                time.sleep(backoff)
+                backoff *= 2
