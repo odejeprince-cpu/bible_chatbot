@@ -5,6 +5,7 @@ Usage:
     python download_bible.py   # first, to fetch the PDF
     python build_index.py      # then, to build the searchable index
 """
+import json
 from pathlib import Path
 
 from src.chunker import chunk_verses
@@ -14,6 +15,7 @@ from src.config import (
     INDEX_PATH,
     METADATA_PATH,
     PDF_PATH,
+    VERSE_DATA_PATH,
     VERSES_PER_CHUNK,
 )
 from src.embeddings import EmbeddingModel
@@ -36,6 +38,11 @@ def main():
             "WARNING: verse count looks low for a complete Bible (~31,102 verses). "
             "Check the PDF's text layer and the heading/verse regex in src/pdf_parser.py."
         )
+
+    Path(VERSE_DATA_PATH).parent.mkdir(parents=True, exist_ok=True)
+    with open(VERSE_DATA_PATH, "w", encoding="utf-8") as f:
+        json.dump(verses, f)
+    print(f"Saved exact verse data to {VERSE_DATA_PATH}")
 
     print("Chunking verses...")
     chunks = chunk_verses(verses, verses_per_chunk=VERSES_PER_CHUNK, overlap=CHUNK_OVERLAP)

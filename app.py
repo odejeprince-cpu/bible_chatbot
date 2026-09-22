@@ -9,11 +9,14 @@ from src.config import (
     INDEX_PATH,
     METADATA_PATH,
     TOP_K,
+    VERSE_DATA_PATH,
 )
 from src.embeddings import EmbeddingModel
 from src.rag_chain import RAGChain
+from src.reference_parser import find_references
 from src.retriever import HybridRetriever
 from src.vector_store import VectorStore
+from src.verse_store import VerseStore, format_reference
 
 load_dotenv()
 
@@ -112,9 +115,17 @@ st.markdown(
 def load_pipeline():
     embedder = EmbeddingModel(EMBEDDING_MODEL_NAME)
     store = VectorStore.load(INDEX_PATH, METADATA_PATH)
+    try:
+        verse_store = VerseStore.load(VERSE_DATA_PATH)
+    except FileNotFoundError:
+        # Older indexes predate verse-level data. Derive it from their local
+        # KJV chunks so this feature works immediately, then use the dedicated
+        # data automatically after the next normal index rebuild.
+        verse_store = VerseStore.from_chunk_metadata(store.metadata)
     retriever = HybridRetriever(
         store,
         embedder,
+        verse_store=verse_store,
         top_k=TOP_K,
     )
     chain = RAGChain(
@@ -122,16 +133,16 @@ def load_pipeline():
         timeout_ms=GEMINI_TIMEOUT_MS,
     )
 
-    return retriever, chain
+    return retriever, chain, verse_store
 
 
 try:
-    retriever, chain = load_pipeline()
+    retriever, chain, verse_store = load_pipeline()
 
 except FileNotFoundError:
     st.error(
-        "Index not found. Run `python download_bible.py` "
-        "then `python build_index.py` first."
+        "Bible index data not found. Run `python build_index.py` to "
+        "create the local search index and exact verse data."
     )
     st.stop()
 
@@ -201,6 +212,33 @@ st.caption(
 
 
 history = st.session_state.history
+
+
+def render_scripture_references(answer_text: str, message_id: str) -> None:
+    """Render local KJV lookups for citations Gemini included in an answer."""
+    references = find_references(answer_text)
+    if not references:
+        return
+
+    st.caption("Scripture references")
+    for number, reference in enumerate(references):
+        label = format_reference(reference)
+        selection_key = f"selected_scripture_{message_id}"
+        if st.button(f"📖 {label}", key=f"scripture_{message_id}_{number}"):
+            st.session_state[selection_key] = reference
+
+    selected = st.session_state.get(f"selected_scripture_{message_id}")
+    if selected:
+        verses = verse_store.lookup(selected)
+        label = format_reference(selected)
+        with st.expander(f"KJV — {label}", expanded=True):
+            if verses:
+                for verse in verses:
+                    st.markdown(f"**{verse['reference']}** — {verse['text']}")
+            else:
+                st.warning("This reference was not found in the local KJV data.")
+
+
 i = 0
 
 while i < len(history):
@@ -251,6 +289,8 @@ while i < len(history):
             """,
             unsafe_allow_html=True,
         )
+
+        render_scripture_references(answer_text, f"history_{i}")
 
         if sources:
             with st.expander(

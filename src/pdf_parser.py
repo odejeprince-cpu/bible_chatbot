@@ -48,9 +48,11 @@ _book_pattern = '|'.join(re.escape(b).replace(r'\ ', r'\s+') for b in _book_vari
 
 # The running header at the very top of a page's extracted text, e.g.
 # "Genesis 1:1 1 Genesis 1:30" or "1 Corinthians 13:1 812 1 Corinthians 13:13".
+# The five single-chapter books omit the colon and verse number entirely,
+# e.g. "Jude 1 905 Jude 25". Accept both layouts.
 HEADER_RE = re.compile(
-    r'^\s*(' + _book_pattern + r')\s+(\d{1,3}):(\d{1,3})\s+\d+\s+'
-    r'(' + _book_pattern + r')\s+(\d{1,3}):(\d{1,3})',
+    r'^\s*(' + _book_pattern + r')\s+(\d{1,3})(?::(\d{1,3}))?\s+\d+\s+'
+    r'(' + _book_pattern + r')\s+(\d{1,3})(?::(\d{1,3}))?',
     re.IGNORECASE,
 )
 

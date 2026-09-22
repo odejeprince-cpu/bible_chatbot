@@ -90,14 +90,8 @@ REFERENCE_RE = re.compile(
 )
 
 
-def parse_reference(query: str) -> Optional[Dict]:
-    """
-    Returns {"book", "chapter", "verse_start"?, "verse_end"?} for the
-    first recognizable Bible reference found in the query, or None.
-    """
-    match = REFERENCE_RE.search(query)
-    if not match:
-        return None
+def _reference_from_match(match: re.Match) -> Optional[Dict]:
+    """Convert a regex match into the canonical reference representation."""
     raw_book, chapter, verse_start, verse_end = match.groups()
     key = re.sub(r'\s+', ' ', raw_book.strip().lower())
     book = BOOK_ALIASES.get(key)
@@ -108,3 +102,31 @@ def parse_reference(query: str) -> Optional[Dict]:
         result["verse_start"] = int(verse_start)
         result["verse_end"] = int(verse_end) if verse_end else int(verse_start)
     return result
+
+
+def parse_reference(query: str) -> Optional[Dict]:
+    """
+    Returns the first recognizable Bible reference in *query*, or None.
+    """
+    match = REFERENCE_RE.search(query)
+    return _reference_from_match(match) if match else None
+
+
+def find_references(text: str) -> list[Dict]:
+    """Return distinct canonical references found in text, in text order."""
+    references = []
+    seen = set()
+    for match in REFERENCE_RE.finditer(text):
+        reference = _reference_from_match(match)
+        if not reference:
+            continue
+        key = (
+            reference["book"],
+            reference["chapter"],
+            reference.get("verse_start"),
+            reference.get("verse_end"),
+        )
+        if key not in seen:
+            references.append(reference)
+            seen.add(key)
+    return references

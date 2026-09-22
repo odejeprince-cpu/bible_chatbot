@@ -11,6 +11,7 @@ PDF_PATH = os.path.join(BASE_DIR, "data", "kjv_bible.pdf")
 INDEX_DIR = os.path.join(BASE_DIR, "index")
 INDEX_PATH = os.path.join(INDEX_DIR, "kjv.faiss")
 METADATA_PATH = os.path.join(INDEX_DIR, "kjv_metadata.json")
+VERSE_DATA_PATH = os.path.join(INDEX_DIR, "kjv_verses.json")
 
 # --- Embedding model ----------------------------------------------------
 # Local, free, CPU-friendly. 384-dim, good enough for verse-level RAG.

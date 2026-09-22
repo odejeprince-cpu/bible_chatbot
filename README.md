@@ -15,7 +15,8 @@ guessing.
    each keep an exact `Book Chapter:Verse` reference (`src/chunker.py`),
    embeds them locally with `sentence-transformers`
    (`src/embeddings.py`), and stores them in a FAISS index
-   (`src/vector_store.py`).
+   (`src/vector_store.py`). It also saves the individual local KJV verses
+   used for exact lookup.
 3. **`app.py`** is a Streamlit chat UI. Each question goes through
    `src/retriever.py`, which:
    - checks whether the question names an exact reference
@@ -35,7 +36,8 @@ kjv-bible-chatbot/
 │   └── kjv_bible.pdf          # created by download_bible.py
 ├── index/
 │   ├── kjv.faiss               # created by build_index.py
-│   └── kjv_metadata.json       # created by build_index.py
+│   ├── kjv_metadata.json       # created by build_index.py
+│   └── kjv_verses.json         # created by build_index.py; exact local lookup
 ├── src/
 │   ├── __init__.py
 │   ├── config.py                # paths, model names, chunk/retrieval settings
@@ -44,6 +46,7 @@ kjv-bible-chatbot/
 │   ├── embeddings.py             # sentence-transformers wrapper
 │   ├── vector_store.py           # FAISS index wrapper (save/load/search)
 │   ├── reference_parser.py       # detects "John 3:16" style references
+│   ├── verse_store.py             # exact local KJV verse lookup
 │   ├── retriever.py               # hybrid exact + semantic retrieval
 │   └── rag_chain.py               # strict-grounding prompt + Gemini call
 ├── download_bible.py             # fetches the public-domain KJV PDF
