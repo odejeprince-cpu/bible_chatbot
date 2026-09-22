@@ -18,6 +18,10 @@ EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 # --- Generation model (Google Gemini) ------------------------------------
 GEMINI_MODEL = "gemini-3.6-flash"
+# The SDK takes this value in milliseconds.  A finite timeout keeps a DNS,
+# firewall, or stalled network connection from leaving the Streamlit page
+# waiting indefinitely.
+GEMINI_TIMEOUT_MS = 30_000
 
 # --- Chunking -------------------------------------------------------------
 # Verses are grouped, per chapter, into small overlapping windows so every
@@ -26,4 +30,4 @@ VERSES_PER_CHUNK = 5
 CHUNK_OVERLAP = 1
 
 # --- Retrieval --------------------------------------------------------
-TOP_K = 5
+TOP_K = 3
