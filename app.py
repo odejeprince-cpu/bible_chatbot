@@ -99,42 +99,36 @@ question = st.chat_input(
 
 
 if question:
-    st.write("**Step 1: Searching the Bible...**")
+    with st.chat_message("user"):
+        st.markdown(question)
 
-    passages = retriever.retrieve(question)
+    with st.chat_message("assistant"):
+        with st.spinner("Searching the scriptures..."):
+            passages = retriever.retrieve(question)
 
-    st.write(
-        "**Step 2: Bible search finished. "
-        f"Found {len(passages)} passages.**"
-    )
+            answer_placeholder = st.empty()
+            answer_parts = []
 
-    st.write("**Step 3: Asking Gemini...**")
+            try:
+                for chunk in chain.answer_stream(
+                    question,
+                    passages,
+                ):
+                    answer_parts.append(chunk)
 
-    answer_placeholder = st.empty()
-    answer_parts = []
+                    answer_placeholder.markdown(
+                        "".join(answer_parts)
+                    )
 
-    try:
-        for chunk in chain.answer_stream(
-            question,
-            passages,
-        ):
-            answer_parts.append(chunk)
+            except Exception:
+                answer = (
+                    "An unexpected error occurred while asking Gemini. "
+                    "Please try again."
+                )
+                answer_parts = [answer]
+                answer_placeholder.markdown(answer)
 
-            answer_placeholder.markdown(
-                "".join(answer_parts)
-            )
-
-    except Exception:
-        answer = (
-            "An unexpected error occurred while asking Gemini. "
-            "Please try again."
-        )
-        answer_parts = [answer]
-        answer_placeholder.markdown(answer)
-
-    answer = "".join(answer_parts)
-
-    st.write("**Step 4: Gemini finished.**")
+            answer = "".join(answer_parts)
 
     st.session_state.history.append(
         {
