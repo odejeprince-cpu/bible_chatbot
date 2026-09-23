@@ -1,0 +1,6 @@
+[server]
+# `transformers` exposes optional image-processing modules lazily. Streamlit's
+# module watcher probes those modules on startup, producing hundreds of
+# misleading `torchvision` errors even though this text-only app does not use
+# vision models. Disable the watcher in the deployed, immutable environment.
+fileWatcherType = "none"
