@@ -1,7 +1,14 @@
+from datetime import datetime, timedelta
+
+import extra_streamlit_components as stx
 import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
+
+import os
+for _key in st.secrets.keys():
+    os.environ[_key] = str(st.secrets[_key])
 
 from src import auth, chat_store, google_auth
 from src.pipeline import load_pipeline
@@ -15,35 +22,62 @@ st.set_page_config(
 
 inject_custom_css()
 
+COOKIE_NAME = "bible_chat_session"
+cookie_manager = stx.CookieManager(key="cookie_manager")
+
 # ---------- Auth gate ----------
 if "user" not in st.session_state:
     st.session_state.user = None
 
+existing_token = cookie_manager.get(COOKIE_NAME)
+
+# Try to restore a session from the cookie (e.g. after a page refresh)
+if st.session_state.user is None and existing_token:
+    restored_user_id = auth.get_user_id_for_session(existing_token)
+    if restored_user_id:
+        st.session_state.user = auth.get_user_by_id(restored_user_id)
+
 query_params = st.query_params
-if st.session_state.user is None and "code" in query_params:
+incoming_code = query_params.get("code")
+
+if (
+    st.session_state.user is None
+    and incoming_code
+    and st.session_state.get("last_processed_code") != incoming_code
+):
+    st.session_state.last_processed_code = incoming_code
     try:
-        profile = google_auth.exchange_code_for_user(query_params["code"])
+        profile = google_auth.exchange_code_for_user(incoming_code)
         user = auth.get_or_create_google_user(
             google_id=profile["sub"],
             email=profile.get("email", ""),
             name=profile.get("name", ""),
         )
         st.session_state.user = user
+        new_token = auth.create_session(user["id"])
+        cookie_manager.set(
+            COOKIE_NAME,
+            new_token,
+            expires_at=datetime.now() + timedelta(days=30),
+            key="set_cookie_google",
+        )
         st.query_params.clear()
-        st.rerun()
-    except Exception:
-        st.error("Google sign-in failed. Please try again.")
+    except Exception as e:
+        st.error(f"Google sign-in failed: {e}")
         st.query_params.clear()
 
 if st.session_state.user is None:
     st.title("📖 KJV Bible Chatbot")
     st.caption("Sign in to save and revisit your chat history.")
 
-    st.link_button(
-        "Continue with Google",
-        google_auth.google_login_url(),
-        use_container_width=True,
-    )
+    try:
+        st.link_button(
+            "Continue with Google",
+            google_auth.google_login_url(),
+            use_container_width=True,
+        )
+    except ValueError as e:
+        st.warning(str(e))
 
     st.markdown("---")
 
@@ -57,6 +91,13 @@ if st.session_state.user is None:
                 user = auth.verify_phone_login(phone, password)
                 if user:
                     st.session_state.user = user
+                    new_token = auth.create_session(user["id"])
+                    cookie_manager.set(
+                        COOKIE_NAME,
+                        new_token,
+                        expires_at=datetime.now() + timedelta(days=30),
+                        key="set_cookie_signin",
+                    )
                     st.rerun()
                 else:
                     st.error("Incorrect phone number or password.")
@@ -80,6 +121,13 @@ if st.session_state.user is None:
                     try:
                         user = auth.create_user_with_phone(phone, password, name)
                         st.session_state.user = user
+                        new_token = auth.create_session(user["id"])
+                        cookie_manager.set(
+                            COOKIE_NAME,
+                            new_token,
+                            expires_at=datetime.now() + timedelta(days=30),
+                            key="set_cookie_signup",
+                        )
                         st.rerun()
                     except ValueError as e:
                         st.error(str(e))
@@ -148,9 +196,13 @@ with st.sidebar:
     )
 
     if st.button("Sign out", use_container_width=True):
+        if existing_token:
+            auth.delete_session(existing_token)
+        cookie_manager.delete(COOKIE_NAME, key="delete_cookie_signout")
         st.session_state.user = None
         st.session_state.pop("chat_id", None)
         st.session_state.pop("history", None)
+        st.session_state.pop("disclaimer_seen", None)
         st.rerun()
 
     if st.button("+ New chat", use_container_width=True):

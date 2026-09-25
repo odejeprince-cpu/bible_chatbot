@@ -20,6 +20,12 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 
 def google_login_url() -> str:
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise ValueError(
+            "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set. "
+            "Check your .env file, then fully restart the app "
+            "(Ctrl+C, then `streamlit run app.py` again)."
+        )
     params = {
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": GOOGLE_REDIRECT_URI,
@@ -44,7 +50,8 @@ def exchange_code_for_user(code: str) -> dict:
         },
         timeout=10,
     )
-    token_resp.raise_for_status()
+    if not token_resp.ok:
+        raise RuntimeError(f"Google token error {token_resp.status_code}: {token_resp.text}")
     access_token = token_resp.json()["access_token"]
 
     userinfo_resp = requests.get(

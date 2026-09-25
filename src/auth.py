@@ -38,6 +38,16 @@ def init_db() -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user_id TEXT,
+            created_at REAL,
+            expires_at REAL
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -115,6 +125,59 @@ def get_or_create_google_user(google_id: str, email: str, name: str) -> Dict:
     conn.commit()
     conn.close()
     return {"id": user_id, "email": email, "name": name}
+
+
+def get_user_by_id(user_id: str) -> Optional[Dict]:
+    init_db()
+    conn = _connect()
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "phone": row["phone"],
+        "email": row["email"],
+        "name": row["name"],
+    }
+
+
+def create_session(user_id: str, days_valid: int = 30) -> str:
+    """Creates a long-lived session token for 'remember me' via cookie."""
+    init_db()
+    conn = _connect()
+    token = secrets.token_urlsafe(32)
+    now = time.time()
+    conn.execute(
+        "INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+        (token, user_id, now, now + days_valid * 86400),
+    )
+    conn.commit()
+    conn.close()
+    return token
+
+
+def get_user_id_for_session(token: str) -> Optional[str]:
+    init_db()
+    conn = _connect()
+    row = conn.execute(
+        "SELECT user_id, expires_at FROM sessions WHERE token = ?", (token,)
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    if row["expires_at"] < time.time():
+        delete_session(token)
+        return None
+    return row["user_id"]
+
+
+def delete_session(token: str) -> None:
+    init_db()
+    conn = _connect()
+    conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
 
 
 def _ensure_disclaimer_column() -> None:
