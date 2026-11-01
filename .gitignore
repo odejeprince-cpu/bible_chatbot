@@ -3,3 +3,5 @@
 venv/
 chats/
 users.db
+app_data/
+__pycache__/

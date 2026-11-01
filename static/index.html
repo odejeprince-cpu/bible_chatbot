@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KJV Bible Chatbot</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
+<style>
+  :root {
+    --bg: #faf7f2; --panel: #ffffff; --side: #f1ece3; --text: #2b2620; --muted: #7a7064;
+    --line: #e4ddd0; --accent: #7a4b1e; --accent-text: #ffffff; --user: #efe6d6; --error: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1814; --panel: #24201b; --side: #201c17; --text: #ece5d8; --muted: #a39887;
+      --line: #3a342b; --accent: #d6a463; --accent-text: #1b1814; --user: #342d23; --error: #f2a29b;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: Georgia, "Times New Roman", serif; background: var(--bg); color: var(--text); }
+  button, input { font: inherit; color: inherit; }
+  .hidden { display: none !important; }
+
+  /* ---------- auth screen ---------- */
+  #auth { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .card { width: 100%; max-width: 400px; background: var(--panel); border: 1px solid var(--line);
+          border-radius: 16px; padding: 28px; }
+  .card h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  .card p.sub { margin: 0 0 20px; color: var(--muted); }
+  .btn { display: block; width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+         background: var(--panel); cursor: pointer; text-align: center; text-decoration: none; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .divider { text-align: center; color: var(--muted); margin: 18px 0; font-size: .9rem; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .tab { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: transparent; cursor: pointer; }
+  .tab.active { background: var(--user); border-color: var(--accent); }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 4px; }
+  .field input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+                 background: var(--bg); }
+  .error { color: var(--error); font-size: .9rem; margin: 0 0 12px; min-height: 1.2em; }
+
+  /* ---------- password show/hide (eye button) ---------- */
+  .pw-wrap { position: relative; }
+  .pw-wrap input { padding-right: 46px; }
+  .pw-toggle { position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+               background: none; border: 0; cursor: pointer; color: var(--muted);
+               padding: 6px; display: flex; align-items: center; justify-content: center; border-radius: 6px; }
+  .pw-toggle:hover { color: var(--text); }
+  .pw-toggle svg { width: 20px; height: 20px; }
+
+  /* ---------- app layout ---------- */
+  #app { height: 100%; display: flex; }
+  aside { width: 280px; background: var(--side); border-right: 1px solid var(--line); display: flex;
+          flex-direction: column; padding: 14px; gap: 10px; }
+  aside h2 { font-size: 1.05rem; margin: 4px 0 0; }
+  .who { color: var(--muted); font-size: .85rem; margin-bottom: 4px; word-break: break-word; }
+  #chat-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .chat-item { display: flex; align-items: center; border-radius: 8px; }
+  .chat-item.active { background: var(--user); }
+  .chat-item button.open { flex: 1; text-align: left; background: none; border: 0; padding: 8px 10px; cursor: pointer;
+                           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-item button.del { background: none; border: 0; cursor: pointer; color: var(--muted); padding: 6px 10px; }
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  header { display: none; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  #messages { flex: 1; overflow-y: auto; padding: 24px 16px; }
+  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .empty { text-align: center; color: var(--muted); margin-top: 12vh; }
+  .empty h2 { color: var(--text); margin-bottom: 6px; }
+  .msg { padding: 12px 16px; border-radius: 14px; line-height: 1.55; max-width: 92%; overflow-wrap: anywhere; }
+  .msg.user { align-self: flex-end; background: var(--user); white-space: pre-wrap; }
+  .msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
+  .msg.assistant p { margin: 0 0 .7em; } .msg.assistant p:last-child { margin-bottom: 0; }
+  .msg.assistant blockquote { margin: .5em 0; padding-left: 12px; border-left: 3px solid var(--accent); font-style: italic; }
+  .msg.assistant ul { margin: .4em 0; padding-left: 1.3em; }
+  .thinking { color: var(--muted); font-style: italic; }
+  form#composer { border-top: 1px solid var(--line); padding: 12px 16px; background: var(--bg); }
+  .composer-row { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; }
+  #question { flex: 1; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
+  #send { width: auto; padding: 0 20px; }
+  #send:disabled { opacity: .5; cursor: default; }
+
+  dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text);
+           max-width: 460px; padding: 24px; }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  dialog h3 { margin-top: 0; }
+  dialog label { display: flex; gap: 8px; align-items: center; margin: 14px 0; }
+
+  @media (max-width: 760px) {
+    aside { position: fixed; inset: 0 auto 0 0; z-index: 10; transform: translateX(-100%); transition: transform .2s; }
+    aside.open { transform: none; box-shadow: 0 0 40px rgba(0,0,0,.35); }
+    header { display: flex; }
+    header button { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ======================= sign in ======================= -->
+<div id="auth" class="hidden">
+  <div class="card">
+    <h1>📖 KJV Bible Chatbot</h1>
+    <p class="sub">Sign in to save and revisit your chat history.</p>
+    <p id="auth-error" class="error"></p>
+
+    <a class="btn" href="/auth/google/login">Continue with Google</a>
+    <div class="divider">or use your phone number</div>
+
+    <div class="tabs">
+      <button type="button" class="tab active" data-tab="signin">Sign in</button>
+      <button type="button" class="tab" data-tab="signup">Create account</button>
+    </div>
+
+    <form id="signin-form">
+      <div class="field"><label for="si-phone">Phone number</label><input id="si-phone" type="tel" autocomplete="tel" required></div>
+      <div class="field">
+        <label for="si-pass">Password</label>
+        <div class="pw-wrap">
+          <input id="si-pass" type="password" autocomplete="current-password" required>
+          <button type="button" class="pw-toggle" aria-label="Show password"></button>
+        </div>
+      </div>
+      <button class="btn primary" type="submit">Sign in</button>
+    </form>
+
+    <form id="signup-form" class="hidden">
+      <div class="field"><label for="su-name">Name</label><input id="su-name" type="text" autocomplete="name"></div>
+      <div class="field"><label for="su-phone">Phone number</label><input id="su-phone" type="tel" autocomplete="tel" required></div>
+      <div class="field">
+        <label for="su-pass">Password (6+ characters)</label>
+        <div class="pw-wrap">
+          <input id="su-pass" type="password" autocomplete="new-password" required>
+          <button type="button" class="pw-toggle" aria-label="Show password"></button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="su-confirm">Confirm password</label>
+        <div class="pw-wrap">
+          <input id="su-confirm" type="password" autocomplete="new-password" required>
+          <button type="button" class="pw-toggle" aria-label="Show password"></button>
+        </div>
+      </div>
+      <button class="btn primary" type="submit">Create account</button>
+    </form>
+  </div>
+</div>
+
+<!-- ======================= chat app ======================= -->
+<div id="app" class="hidden">
+  <aside id="sidebar">
+    <h2>📖 KJV Bible Chatbot</h2>
+    <div class="who" id="who"></div>
+    <button class="btn primary" id="new-chat" type="button">+ New chat</button>
+    <div class="who" style="margin-top:6px"><strong>Recent chats</strong></div>
+    <div id="chat-list"></div>
+    <button class="btn" id="signout" type="button">Sign out</button>
+  </aside>
+
+  <main>
+    <header><button id="menu" type="button" aria-label="Open menu">☰</button><strong>KJV Bible Chatbot</strong></header>
+    <div id="messages"><div class="wrap" id="wrap"></div></div>
+    <form id="composer">
+      <div class="composer-row">
+        <input id="question" type="text" placeholder="Ask about the KJV Bible… (e.g. John 3:16)" autocomplete="off" maxlength="1000">
+        <button class="btn primary" id="send" type="submit">Send</button>
+      </div>
+    </form>
+  </main>
+</div>
+
+<!-- ======================= disclaimer ======================= -->
+<dialog id="disclaimer">
+  <h3>A Note Before You Continue</h3>
+  <p><strong>MOMENT OF REFLECTION</strong></p>
+  <p><em>He that getteth wisdom loveth his own soul: he that keepeth understanding shall find good.</em></p>
+  <hr>
+  <p>This chatbot is not a substitute for professional counseling, medical advice, or pastoral care.
+     If you are facing emotional, mental, or spiritual challenges, please reach out to a licensed counselor
+     or therapist, a medical professional, or a trusted pastor.</p>
+  <label><input type="checkbox" id="dont-show"> Don't show again</label>
+  <button class="btn primary" id="disclaimer-ok" type="button">Ok, I understand</button>
+</dialog>
+
+<script>
+const $ = (sel) => document.querySelector(sel);
+const state = { user: null, chatId: null, busy: false };
+
+/* ---------- helpers ---------- */
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  if (!res.ok) {
+    let msg = "Something went wrong. Please try again.";
+    try { const j = await res.json(); if (typeof j.detail === "string") msg = j.detail; } catch (_) {}
+    const err = new Error(msg); err.status = res.status; throw err;
+  }
+  return res;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function inline(s) {
+  return s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+          .replace(/(^|[\s(])\*(?!\s)(.+?)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>")
+          .replace(/(^|[\s(])_(?!\s)(.+?)_(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
+}
+function renderMarkdown(text) {
+  const lines = escapeHtml(text).split("\n");
+  let html = "", list = false, para = [];
+  const flushPara = () => { if (para.length) { html += "<p>" + inline(para.join("<br>")) + "</p>"; para = []; } };
+  const closeList = () => { if (list) { html += "</ul>"; list = false; } };
+  for (const line of lines) {
+    if (/^\s*[-*]\s+/.test(line)) {
+      flushPara(); if (!list) { html += "<ul>"; list = true; }
+      html += "<li>" + inline(line.replace(/^\s*[-*]\s+/, "")) + "</li>";
+    } else if (/^&gt;\s?/.test(line)) {
+      flushPara(); closeList();
+      html += "<blockquote>" + inline(line.replace(/^&gt;\s?/, "")) + "</blockquote>";
+    } else if (line.trim() === "") {
+      flushPara(); closeList();
+    } else { closeList(); para.push(line); }
+  }
+  flushPara(); closeList();
+  return html;
+}
+
+function scrollDown() { const m = $("#messages"); m.scrollTop = m.scrollHeight; }
+
+function addMessage(role, text, { thinking = false } = {}) {
+  const el = document.createElement("div");
+  el.className = "msg " + role;
+  if (role === "user") el.textContent = text;
+  else if (thinking) el.innerHTML = '<span class="thinking">Searching the scriptures…</span>';
+  else el.innerHTML = renderMarkdown(text);
+  $("#wrap").appendChild(el);
+  scrollDown();
+  return el;
+}
+
+function showEmpty() {
+  $("#wrap").innerHTML =
+    '<div class="empty"><h2>Ask the Scriptures</h2><p>Look up a verse like “John 3:16” or ask a question like “What does the Bible say about forgiveness?”</p></div>';
+}
+
+/* ---------- screens ---------- */
+function showAuth(message) {
+  state.user = null;
+  $("#app").classList.add("hidden");
+  $("#auth").classList.remove("hidden");
+  $("#auth-error").textContent = message || "";
+}
+
+async function showApp(user) {
+  state.user = user;
+  $("#auth").classList.add("hidden");
+  $("#app").classList.remove("hidden");
+  $("#who").textContent = "Signed in as " + user.name;
+  newChat();
+  await refreshChats();
+  if (!user.disclaimer_dismissed && !sessionStorage.getItem("disclaimer_seen")) {
+    $("#disclaimer").showModal();
+  }
+}
+
+/* ---------- password show/hide (eye button) ---------- */
+const EYE_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>' +
+  '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>' +
+  '<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+document.querySelectorAll(".pw-toggle").forEach((btn) => {
+  btn.innerHTML = EYE_ICON;
+  btn.addEventListener("click", () => {
+    const input = btn.previousElementSibling;
+    const show = input.type === "password";
+    input.type = show ? "text" : "password";
+    btn.innerHTML = show ? EYE_OFF_ICON : EYE_ICON;
+    btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+    input.focus();
+  });
+});
+
+/* ---------- auth forms ---------- */
+document.querySelectorAll(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
+    $("#signin-form").classList.toggle("hidden", tab.dataset.tab !== "signin");
+    $("#signup-form").classList.toggle("hidden", tab.dataset.tab !== "signup");
+    $("#auth-error").textContent = "";
+  });
+});
+
+async function afterLogin() {
+  const res = await api("/api/me");
+  await showApp(await res.json());
+}
+
+$("#signin-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("#auth-error").textContent = "";
+  try {
+    await api("/api/login", { method: "POST", body: JSON.stringify({ phone: $("#si-phone").value, password: $("#si-pass").value }) });
+    await afterLogin();
+  } catch (err) { $("#auth-error").textContent = err.message; }
+});
+
+$("#signup-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("#auth-error").textContent = "";
+  if ($("#su-pass").value !== $("#su-confirm").value) { $("#auth-error").textContent = "Passwords don't match."; return; }
+  try {
+    await api("/api/signup", { method: "POST", body: JSON.stringify({ name: $("#su-name").value, phone: $("#su-phone").value, password: $("#su-pass").value }) });
+    await afterLogin();
+  } catch (err) { $("#auth-error").textContent = err.message; }
+});
+
+$("#signout").addEventListener("click", async () => {
+  try { await api("/api/logout", { method: "POST" }); } catch (_) {}
+  sessionStorage.removeItem("disclaimer_seen");
+  showAuth();
+});
+
+/* ---------- disclaimer ---------- */
+$("#disclaimer-ok").addEventListener("click", async () => {
+  sessionStorage.setItem("disclaimer_seen", "1");
+  if ($("#dont-show").checked) { try { await api("/api/disclaimer/dismiss", { method: "POST" }); state.user.disclaimer_dismissed = true; } catch (_) {} }
+  $("#disclaimer").close();
+});
+
+/* ---------- chats ---------- */
+function newChat() {
+  state.chatId = null;
+  showEmpty();
+  $("#sidebar").classList.remove("open");
+  highlightActive();
+}
+
+function highlightActive() {
+  document.querySelectorAll(".chat-item").forEach((el) => el.classList.toggle("active", el.dataset.id === state.chatId));
+}
+
+async function refreshChats() {
+  try {
+    const chats = await (await api("/api/chats")).json();
+    const list = $("#chat-list");
+    list.innerHTML = "";
+    for (const c of chats) {
+      const row = document.createElement("div");
+      row.className = "chat-item"; row.dataset.id = c.id;
+      const open = document.createElement("button");
+      open.className = "open"; open.textContent = c.title; open.title = c.title;
+      open.addEventListener("click", () => openChat(c.id));
+      const del = document.createElement("button");
+      del.className = "del"; del.textContent = "×"; del.title = "Delete chat";
+      del.addEventListener("click", async () => {
+        if (!confirm("Delete this chat?")) return;
+        await api("/api/chats/" + c.id, { method: "DELETE" });
+        if (state.chatId === c.id) newChat();
+        refreshChats();
+      });
+      row.append(open, del);
+      list.appendChild(row);
+    }
+    highlightActive();
+  } catch (err) { if (err.status === 401) showAuth("Your session expired. Please sign in again."); }
+}
+
+async function openChat(id) {
+  try {
+    const chat = await (await api("/api/chats/" + id)).json();
+    state.chatId = chat.id;
+    $("#wrap").innerHTML = "";
+    chat.messages.forEach((m) => addMessage(m.role, m.content));
+    $("#sidebar").classList.remove("open");
+    highlightActive();
+    scrollDown();
+  } catch (err) { if (err.status === 401) showAuth("Your session expired. Please sign in again."); }
+}
+
+$("#new-chat").addEventListener("click", newChat);
+$("#menu").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
+
+/* ---------- sending a question ---------- */
+$("#composer").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = $("#question");
+  const question = input.value.trim();
+  if (!question || state.busy) return;
+
+  if ($(".empty")) $("#wrap").innerHTML = "";
+  state.busy = true; $("#send").disabled = true; input.value = "";
+  addMessage("user", question);
+  const bubble = addMessage("assistant", "", { thinking: true });
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, chat_id: state.chatId }),
+    });
+    if (res.status === 401) { showAuth("Your session expired. Please sign in again."); return; }
+    if (!res.ok) {
+      let msg = "Something went wrong. Please try again.";
+      try { const j = await res.json(); if (typeof j.detail === "string") msg = j.detail; } catch (_) {}
+      bubble.textContent = msg; return;
+    }
+    state.chatId = res.headers.get("X-Chat-Id");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
+      bubble.innerHTML = renderMarkdown(text);
+      scrollDown();
+    }
+    text += decoder.decode();
+    bubble.innerHTML = renderMarkdown(text || "No answer was returned. Please try again.");
+    refreshChats();
+  } catch (err) {
+    bubble.textContent = "Network error. Please check your connection and try again.";
+  } finally {
+    state.busy = false; $("#send").disabled = false; input.focus();
+  }
+});
+
+/* ---------- start ---------- */
+(async function init() {
+  const params = new URLSearchParams(location.search);
+  const authError = params.get("auth_error");
+  if (authError) history.replaceState(null, "", "/");
+  try {
+    const user = await (await api("/api/me")).json();
+    await showApp(user);
+  } catch (err) {
+    showAuth(authError || "");
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,14 +1,21 @@
+import os
+import time
+import traceback
 from datetime import datetime, timedelta
 
 import extra_streamlit_components as stx
 import streamlit as st
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv()  # must run before any src imports
 
-import os
-for _key in st.secrets.keys():
-    os.environ[_key] = str(st.secrets[_key])
+# On a host (e.g. Pxxl / Streamlit Cloud) secrets may come from st.secrets.
+# Locally there is no secrets file, so skip this quietly and use .env instead.
+try:
+    for _key in st.secrets.keys():
+        os.environ[_key] = str(st.secrets[_key])
+except Exception:
+    pass
 
 from src import auth, chat_store, google_auth
 from src.pipeline import load_pipeline
@@ -23,7 +30,20 @@ st.set_page_config(
 inject_custom_css()
 
 COOKIE_NAME = "bible_chat_session"
+COOKIE_DAYS = 30
 cookie_manager = stx.CookieManager(key="cookie_manager")
+
+
+def _set_session_cookie(user_id, key):
+    """Create a DB session and ask the browser to store its token."""
+    token = auth.create_session(user_id)
+    cookie_manager.set(
+        COOKIE_NAME,
+        token,
+        expires_at=datetime.now() + timedelta(days=COOKIE_DAYS),
+        key=key,
+    )
+
 
 # ---------- Auth gate ----------
 if "user" not in st.session_state:
@@ -31,7 +51,9 @@ if "user" not in st.session_state:
 
 existing_token = cookie_manager.get(COOKIE_NAME)
 
-# Try to restore a session from the cookie (e.g. after a page refresh)
+# Restore a session from the cookie (e.g. after a page refresh).
+# On the very first run after a refresh, get() can return None until the
+# CookieManager component reports back; a rerun follows automatically.
 if st.session_state.user is None and existing_token:
     restored_user_id = auth.get_user_id_for_session(existing_token)
     if restored_user_id:
@@ -40,6 +62,7 @@ if st.session_state.user is None and existing_token:
 query_params = st.query_params
 incoming_code = query_params.get("code")
 
+# Google OAuth callback: redeem the single-use code exactly once.
 if (
     st.session_state.user is None
     and incoming_code
@@ -54,21 +77,26 @@ if (
             name=profile.get("name", ""),
         )
         st.session_state.user = user
-        new_token = auth.create_session(user["id"])
-        cookie_manager.set(
-            COOKIE_NAME,
-            new_token,
-            expires_at=datetime.now() + timedelta(days=30),
-            key="set_cookie_google",
-        )
-        st.query_params.clear()
+        st.session_state.pop("google_error", None)
+        _set_session_cookie(user["id"], "set_cookie_google")
+        # No st.rerun() here. The script keeps running with the user set, so
+        # the cookie component renders in this same pass. The code is removed
+        # from the URL further below, once the cookie has been stored.
     except Exception as e:
-        st.error(f"Google sign-in failed: {e}")
+        traceback.print_exc()  # full error shows in the terminal
+        st.session_state.google_error = f"Google sign-in failed: {e}"
         st.query_params.clear()
+
+# Clean the one-time code out of the URL only after the cookie is stored.
+if st.session_state.user is not None and "code" in st.query_params and existing_token:
+    st.query_params.clear()
 
 if st.session_state.user is None:
     st.title("📖 KJV Bible Chatbot")
     st.caption("Sign in to save and revisit your chat history.")
+
+    if st.session_state.get("google_error"):
+        st.error(st.session_state["google_error"])
 
     try:
         st.link_button(
@@ -91,13 +119,8 @@ if st.session_state.user is None:
                 user = auth.verify_phone_login(phone, password)
                 if user:
                     st.session_state.user = user
-                    new_token = auth.create_session(user["id"])
-                    cookie_manager.set(
-                        COOKIE_NAME,
-                        new_token,
-                        expires_at=datetime.now() + timedelta(days=30),
-                        key="set_cookie_signin",
-                    )
+                    _set_session_cookie(user["id"], "set_cookie_signin")
+                    time.sleep(0.5)  # let the cookie component reach the browser
                     st.rerun()
                 else:
                     st.error("Incorrect phone number or password.")
@@ -121,13 +144,8 @@ if st.session_state.user is None:
                     try:
                         user = auth.create_user_with_phone(phone, password, name)
                         st.session_state.user = user
-                        new_token = auth.create_session(user["id"])
-                        cookie_manager.set(
-                            COOKIE_NAME,
-                            new_token,
-                            expires_at=datetime.now() + timedelta(days=30),
-                            key="set_cookie_signup",
-                        )
+                        _set_session_cookie(user["id"], "set_cookie_signup")
+                        time.sleep(0.5)
                         st.rerun()
                     except ValueError as e:
                         st.error(str(e))
@@ -203,6 +221,7 @@ with st.sidebar:
         st.session_state.pop("chat_id", None)
         st.session_state.pop("history", None)
         st.session_state.pop("disclaimer_seen", None)
+        time.sleep(0.5)  # let the delete reach the browser before rerunning
         st.rerun()
 
     if st.button("+ New chat", use_container_width=True):
